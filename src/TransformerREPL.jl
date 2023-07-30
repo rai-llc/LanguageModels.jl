@@ -279,7 +279,7 @@ function Base.convert(::Type{String}, s::TokenizedString)
     for i in s.tokens
         print(io, s.alphabet[i])
     end
-    String(take(io))
+    String(take!(io))
 end
 
 """
@@ -507,7 +507,6 @@ function main(
         end
 
         print(io, token_str)
-        flush(io)
 
         # advance forward
         token = next

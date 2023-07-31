@@ -7,6 +7,8 @@ to pure Julia.
 
 [![Build Status](https://github.com/rai-llc/LanguageModels.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/rai-llc/LanguageModels.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
+[![Video of LanguageModels.jl running llama2-13b](https://img.youtube.com/vi/EXMTGwwpPV8/sddefault.jpg)](https://youtu.be/EXMTGwwpPV8)
+
 ## Special licensing exception
 
 This repo contains one external file, [sentencepiece_model.proto](https://github.com/google/sentencepiece/blob/635fe8423a249b6e081aacd290d8aef7476c6a28/src/sentencepiece_model.proto), which has its own [copyright and license](https://github.com/google/sentencepiece/blob/635fe8423a249b6e081aacd290d8aef7476c6a28/LICENSE).

@@ -1,4 +1,4 @@
-# LanguageModelsLanguageModels.talkto(steps=512, temperature=0.0)
+# LanguageModels.jl
 
 A port of
 [@karpathy](https://github.com/karpathy)'s

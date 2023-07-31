@@ -1,4 +1,4 @@
-name = "LanguageModelREPL"
+name = "LanguageModels"
 uuid = "ab0a9908-e786-42dd-bb58-44dd7522d931"
 authors = ["Jiahao Chen"]
 version = "1.0.0-DEV"

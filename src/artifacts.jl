@@ -1,3 +1,5 @@
+using Pkg.Artifacts
+using Downloads
 
 artifact_toml = joinpath(@__DIR__, "..", "Artifacts.toml")
 

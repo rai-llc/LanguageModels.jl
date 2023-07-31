@@ -10,7 +10,7 @@ to pure Julia.
 ## Special licensing exception
 
 This repo contains one external file, [sentencepiece_model.proto](https://github.com/google/sentencepiece/blob/635fe8423a249b6e081aacd290d8aef7476c6a28/src/sentencepiece_model.proto), which has its own [copyright and license](https://github.com/google/sentencepiece/blob/635fe8423a249b6e081aacd290d8aef7476c6a28/LICENSE).
-This file is used to generate a Julia interface in the [sentencepiece](https://github.com/rai-llc/LanguageModels.jl/tree/main/src/sentencepiece] subdirectory,
+This file is used to generate a Julia interface in the [sentencepiece](https://github.com/rai-llc/LanguageModels.jl/tree/main/src/sentencepiece) subdirectory,
 which is then used to load the tokenizer model for llama2.
 
 ## How to install

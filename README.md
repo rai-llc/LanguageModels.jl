@@ -13,9 +13,18 @@ This repo contains one external file, [sentencepiece_model.proto](https://github
 This file is used to generate a Julia interface in the [sentencepiece](https://github.com/rai-llc/LanguageModels.jl/tree/main/src/sentencepiece] subdirectory,
 which is then used to load the tokenizer model for llama2.
 
+## How to install
+
+This package is currently unregistered.
+To install it, run
+
+```jl
+julia> using Pkg; Pkg.add(url="https://github.com/rai-llc/LanguageModels.jl")
+```
+
 ## Basic usage
 
-```julia-repl
+```jl
 julia> using LanguageModels
 
 julia> LanguageModels.talkto(temperature=0.0)

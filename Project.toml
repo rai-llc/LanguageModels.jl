@@ -1,11 +1,14 @@
-name = "TransformerREPL"
+name = "LanguageModelREPL"
 uuid = "ab0a9908-e786-42dd-bb58-44dd7522d931"
 authors = ["Jiahao Chen"]
 version = "1.0.0-DEV"
 
 [deps]
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LogExpFunctions = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+ReplMaker = "b873ce64-0db9-51f5-a568-4457d8e49576"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]

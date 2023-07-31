@@ -38,9 +38,29 @@ Supported keyword arguments:
 - `tokenizer_filename`: ditto
 - `temperature::Float32`: how much randomness to use in sampling. Default: `0.9f0`
 - `steps`: How many tokens to generate. Default: 256. Must not exceed `seq_len` in the model definition.
-- `stop_on_bos`. Stop sampling tokens once the BOS (beginning-of-sentence) marker is encountered. Default: `true`. For behavior similar to `llama2.c`, set to `false`.
+- `stop_on_special_tokens`. Stop sampling tokens once the special tokens such as UNK (unknown), BOS (beginning-of-sentence) or EOS (end of sentence) are encountered. Default: `true`. For behavior similar to `llama2.c`, set to `false`.
 
 ## Models
 
-This implementation is currently hard-coded to use the `stories15M` model from Andrej Karpathy's tinyllamas project on HuggingFace, and its corresponding `tokenizer.bin` from the `llama2.c` repo.
+This implementation by default uses the `stories15M` model from Andrej Karpathy's tinyllamas project on HuggingFace, and its corresponding `tokenizer.bin` from the `llama2.c` repo.
 This model is automatically downloaded when the package is built.
+
+### llama-2
+If you have access to the [llama-2](https://huggingface.co/meta-llama) model weights,
+you can follow the [llama2.c instructions](https://github.com/karpathy/llama2.c#metas-llama-2-models)
+for converting them into a usable format.
+The `tokenizer.model` can be read as is. (The code here automatically generates the reader format using the sentencepiece [Protobuf specification](https://github.com/google/sentencepiece/blob/635fe8423a249b6e081aacd290d8aef7476c6a28/src/sentencepiece_model.proto).)
+
+
+```jl
+julia> LanguageModels.main(checkpoint_filename="/Users/jiahao/models/llama/llama-2-7b.bin", tokenizer_filename="/Users/jiahao/models/llama/tokenizer.model", tokenizer_loader=LanguageModels.load_sentencepiece_model, prompt="Once upon a time, there was a llama called",)
+Once upon a time, there was a llama called Pinky and a sheep called Blue.
+Pinky was a llama who ate vermicelli. He was very fussy about how it was cooked. He wanted it long, and hot and slightly damp. It was the only way he would eat it.
+He lived with two humans, Flora and Henry. They didn’t like him very much. They found him funny-looking and they thought he was smelly.
+Flora thought he smelled of durian.
+One day, Blue and Pinky went to their favourite restaurant together. It was called Not Very Delicious at All.
+I’ll leave it you to make up your own mind. You can hear the poem performed here.
+The background I used was the free pixel artist at the top of the sidebar.
+Great story. I need to fin a pic of just flora, or just Henry. Do you have one or do I need to make one?
+I don’t have one with Flora alone. I’ll have a look through my stash and see if I can find one though.
+```

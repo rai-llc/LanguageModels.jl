@@ -1,3 +1,12 @@
+function load_model(checkpoint_filename)
+    open(checkpoint_filename) do file
+        config = read(file, Config)
+        weights = TransformerWeights(config)
+        read!(file, weights)
+        return config, weights
+    end
+end
+
 @views function transformer!(token::Int, pos::Int, p::Config, s::RunState, w::TransformerWeights)
     # a few convenience variables
     x = s.x
@@ -93,7 +102,7 @@
     rmsnorm!(x, x, w.rms_final_weight)
 
     # classifier into logits
-    mul!(s.logits, w.token_embedding_table', x)
+    mul!(s.logits, w.wcls', x)
 end
 
 
@@ -104,10 +113,11 @@ stories15M_path = artifact"stories15M"
     main(;
         checkpoint_filename,
         tokenizer_filename,
+        tokenizer_loader = load_tokenizer,
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
-        stop_on_bos = true,
+        stop_on_special_tokens = true,
         io = stdout)
 
 This implementation has been tested on the stories15M nano GPT model
@@ -115,7 +125,7 @@ and mostly reproduces the output of llama2.c at zero temperature with no prompt.
 The main difference is that it does not print the starting BOS token,
 and terminates the text generation early if a BOS token is encountered
 later. To reproduce the exact output of llama2.c, specify the kwarg
-stop_on_bos = false.
+stop_on_special_tokens = false.
 
 The defaults for checkpoint_filename and tokenizer_filename load the
 stories15M.bin model from Andrej Karpathy's tinyllamas project.
@@ -123,23 +133,19 @@ stories15M.bin model from Andrej Karpathy's tinyllamas project.
 function main(;
         checkpoint_filename = joinpath(stories15M_path, "stories15M.bin"),
         tokenizer_filename = joinpath(stories15M_path, "tokenizer.bin"),
+        tokenizer_loader = load_tokenizer,
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
-        stop_on_bos = true,
+        stop_on_special_tokens = true,
         io = stdout
     )
 
     # read in the model.bin file
-    config, weights = open(checkpoint_filename) do file
-        config = read(file, Config)
-        weights = TransformerWeights(config)
-        read!(file, weights)
-        config, weights
-    end
+    config, weights = load_model(checkpoint_filename)
 
     # read in the tokenizer.bin file
-    tokenizer = load_tokenizer(tokenizer_filename, config.vocab_size)
+    tokenizer = tokenizer_loader(tokenizer_filename, config.vocab_size)
     vocab = tokenizer.alphabet
     state = RunState(config)
 
@@ -180,8 +186,8 @@ function main(;
             token_str = lstrip(token_str)
         end
 
-        # cjh: This behavior deviates from llama2.c if stop_on_bos == true
-        if stop_on_bos && next == 2
+        # cjh: This behavior deviates from llama2.c if stop_on_special_tokens == true
+        if stop_on_special_tokens && (1 ≤ next ≤ 3)
             break
         end
 

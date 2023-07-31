@@ -1,12 +1,17 @@
 module LanguageModels
-
+using Downloads # Todo: package as Artifact
 using LinearAlgebra
 using LogExpFunctions
 using StatsBase
+using ProtoBuf
 
 include("artifacts.jl") # Artifacts for managing model files
-include("modeldata.jl") # Model data 
-include("tokenizer.jl") # Tokenizer types
+include("modeldata.jl") # nanogpt model data 
+
+# Tokenizers
+include("sentencepiece.jl") # sentencepiece tokenizer
+include("tokenizer.jl") # nanogpt tokenizer
+
 include("transformer.jl") # Transformer architecture
 include("repl.jl")
 

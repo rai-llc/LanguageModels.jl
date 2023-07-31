@@ -83,7 +83,7 @@ function load_tokenizer(filename, vocab_size)
         vocab_scores[i] = read(file, Float32)
         len = read(file, Int32)
         if len > max_token_length
-            @error "Encountered token of length $len exceeding maximum of $max_token_length"
+            @error "Encountered token with id $i of length $len exceeding maximum of $max_token_length"
         end
         vocab[i] = read(file, len)
     end
@@ -130,9 +130,10 @@ function (enc::DigramEncodingTokenizer)(text::String)
         char = string(ch)
         id = findfirst(isequal(char), alphabet)
         if isnothing(id)
-            @error "\"$char\" not in alphabet"
+            @warn "\"$char\" ($(collect(char))) not in alphabet; skipping"
+        else
+            push!(tokens, id)
         end
-        push!(tokens, id)
     end
     
     while true # Keep merging consecutive pairs

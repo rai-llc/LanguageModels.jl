@@ -11,30 +11,32 @@ end
 
 function Base.read(io::IOStream, ::Type{Config})
     dim = read(io, Int32)
-    @info "dim = $dim"
     hidden_dim = read(io, Int32)
-    @info "hidden_dim = $hidden_dim"
     n_layers = read(io, Int32)
-    @info "n_layers = $n_layers"
     n_heads = read(io, Int32)
-    @info "n_heads = $n_heads"
     n_kv_heads = read(io, Int32)
-    @info "n_kv_heads = $n_kv_heads"
     vocab_size = read(io, Int32)
-    @info "vocab_size = $vocab_size"
     seq_len = read(io, Int32)
-    @info "seq_len = $seq_len"
     shared_weights = vocab_size > 0
-    @info "shared_weights = $shared_weights"
     vocab_size = abs(vocab_size)
+
+    @info "dim = $dim"
+    @info "hidden_dim = $hidden_dim"
+    @info "n_layers = $n_layers"
+    @info "n_heads = $n_heads"
+    @info "n_kv_heads = $n_kv_heads"
+    @info "seq_len = $seq_len"
+    @info "shared_weights = $shared_weights"
     @info "vocab_size = $vocab_size"
- 
+
     Config(dim, hidden_dim, n_layers, n_heads, n_kv_heads, vocab_size, seq_len, shared_weights)
 end
 
 @kwdef struct TransformerWeights{T}
     # cjh: Here, and in many other places, the matrices are interpreted as being indexed with the dimensions reversed relative to llama2.c, to respect the row-major storage format of the original C and Python codes.
     # This means that matrices have to be transposed in downstream matrix products
+
+    config::Config
 
     token_embedding_table::Matrix{T} # (dim, vocab_size)
     # weights for rmsnorms
@@ -54,9 +56,12 @@ end
     # freq_cis for RoPE relative positional embeddings
     freq_cis_real::Matrix{T} # ((dim / n_heads) / 2, seq_len)
     freq_cis_imag::Matrix{T} # ((dim / n_heads) / 2, seq_len)
+
+    wcls::Matrix{T} # (dim, vocab_size)
 end
 
 TransformerWeights(p::Config) = TransformerWeights(;
+    config = p, 
     token_embedding_table = zeros(Float32, p.dim, p.vocab_size),
     rms_att_weight = zeros(Float32, p.dim, p.n_layers),
     rms_ffn_weight = zeros(Float32, p.dim, p.n_layers),
@@ -70,6 +75,7 @@ TransformerWeights(p::Config) = TransformerWeights(;
     rms_final_weight = zeros(Float32, p.dim),
     freq_cis_real = zeros(Float32, (p.dim ÷ p.n_heads) ÷ 2, p.seq_len),
     freq_cis_imag = zeros(Float32, (p.dim ÷ p.n_heads) ÷ 2, p.seq_len),
+    wcls = zeros(Float32, p.dim, p.vocab_size) 
 )
 
 function Base.read!(io::IOStream, w::TransformerWeights)
@@ -86,6 +92,11 @@ function Base.read!(io::IOStream, w::TransformerWeights)
     read!(io, w.rms_final_weight)
     read!(io, w.freq_cis_real)
     read!(io, w.freq_cis_imag)
+    if w.config.shared_weights
+        w.wcls .= w.token_embedding_table
+    else
+        read!(io, w.wcls)
+    end
     return w
 end
 

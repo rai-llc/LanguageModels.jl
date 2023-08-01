@@ -9,7 +9,7 @@ struct Config
     shared_weights::Bool
 end
 
-function Base.read(io::IOStream, ::Type{Config})
+function Base.read(io::IO, ::Type{Config})
     dim = read(io, Int32)
     hidden_dim = read(io, Int32)
     n_layers = read(io, Int32)
@@ -32,72 +32,74 @@ function Base.read(io::IOStream, ::Type{Config})
     Config(dim, hidden_dim, n_layers, n_heads, n_kv_heads, vocab_size, seq_len, shared_weights)
 end
 
-@kwdef struct TransformerWeights{T}
+@kwdef struct TransformerWeights{T, Vec <: AbstractVector{T}, Mat <: AbstractMatrix{T}, Arr3 <: AbstractArray{T, 3}}
     # cjh: Here, and in many other places, the matrices are interpreted as being indexed with the dimensions reversed relative to llama2.c, to respect the row-major storage format of the original C and Python codes.
     # This means that matrices have to be transposed in downstream matrix products
 
     config::Config
 
-    token_embedding_table::Matrix{T} # (dim, vocab_size)
+    token_embedding_table::Mat # (dim, vocab_size)
     # weights for rmsnorms
-    rms_att_weight::Matrix{T} # (dim, layer)
-    rms_ffn_weight::Matrix{T} # (dim, layer)
+    rms_att_weight::Mat # (dim, layer)
+    rms_ffn_weight::Mat # (dim, layer)
     # weights for matmuls
-    wq::Array{T,3} # (dim, dim, layer)
-    wk::Array{T,3} # (dim, dim, layer)
-    wv::Array{T,3} # (dim, dim, layer)
-    wo::Array{T,3} # (dim, dim, layer)
+    wq::Arr3 # (dim, dim, layer)
+    wk::Arr3 # (dim, dim, layer)
+    wv::Arr3 # (dim, dim, layer)
+    wo::Arr3 # (dim, dim, layer)
     # weights for ffn
-    w1::Array{T,3} # (dim, hidden_dim, layer)
-    w2::Array{T,3} # (hidden_dim, dim, layer)
-    w3::Array{T,3} # (dim, hidden_dim, layer)
+    w1::Arr3 # (dim, hidden_dim, layer)
+    w2::Arr3 # (hidden_dim, dim, layer)
+    w3::Arr3 # (dim, hidden_dim, layer)
     # final rmsnorm
-    rms_final_weight::Vector{T} # (dim,)
+    rms_final_weight::Vec # (dim,)
     # freq_cis for RoPE relative positional embeddings
-    freq_cis_real::Matrix{T} # ((dim / n_heads) / 2, seq_len)
-    freq_cis_imag::Matrix{T} # ((dim / n_heads) / 2, seq_len)
+    freq_cis_real::Mat # ((dim / n_heads) / 2, seq_len)
+    freq_cis_imag::Mat # ((dim / n_heads) / 2, seq_len)
 
-    wcls::Matrix{T} # (dim, vocab_size)
+    wcls::Mat # (dim, vocab_size)
 end
 
-TransformerWeights(p::Config) = TransformerWeights(;
-    config = p, 
-    token_embedding_table = zeros(Float32, p.dim, p.vocab_size),
-    rms_att_weight = zeros(Float32, p.dim, p.n_layers),
-    rms_ffn_weight = zeros(Float32, p.dim, p.n_layers),
-    wq = zeros(Float32, p.dim, p.dim, p.n_layers),
-    wk = zeros(Float32, p.dim, p.dim, p.n_layers),
-    wv = zeros(Float32, p.dim, p.dim, p.n_layers),
-    wo = zeros(Float32, p.dim, p.dim, p.n_layers),
-    w1 = zeros(Float32, p.dim, p.hidden_dim, p.n_layers),
-    w2 = zeros(Float32, p.hidden_dim, p.dim, p.n_layers),
-    w3 = zeros(Float32, p.dim, p.hidden_dim, p.n_layers),
-    rms_final_weight = zeros(Float32, p.dim),
-    freq_cis_real = zeros(Float32, (p.dim ÷ p.n_heads) ÷ 2, p.seq_len),
-    freq_cis_imag = zeros(Float32, (p.dim ÷ p.n_heads) ÷ 2, p.seq_len),
-    wcls = zeros(Float32, p.dim, p.vocab_size) 
-)
+@views function load_model(checkpoint_filename; materialize=copy)
+    v = Mmap.mmap(checkpoint_filename, Vector{Float32})
 
-function Base.read!(io::IOStream, w::TransformerWeights)
-    read!(io, w.token_embedding_table)
-    read!(io, w.rms_att_weight)
-    read!(io, w.wq)
-    read!(io, w.wk)
-    read!(io, w.wv)
-    read!(io, w.wo)
-    read!(io, w.rms_ffn_weight)
-    read!(io, w.w1)
-    read!(io, w.w2)
-    read!(io, w.w3)
-    read!(io, w.rms_final_weight)
-    read!(io, w.freq_cis_real)
-    read!(io, w.freq_cis_imag)
-    if w.config.shared_weights
-        w.wcls .= w.token_embedding_table
-    else
-        read!(io, w.wcls)
+    # Use the first 7*4=28 bytes to read the config
+    p = read(IOBuffer(reinterpret(UInt8, v[1:7])), Config)
+
+    # The remaining bytes are the model weights
+    f = v[8:end]
+    marker = 1
+
+    load = (n...) -> begin
+        step = *(n...)
+        out = reshape(f[marker:(marker+step-1)], n...)
+        marker += step
+        return materialize(out)
     end
-    return w
+
+    token_embedding_table = load(p.dim, p.vocab_size)
+    rms_att_weight = load(p.dim, p.n_layers)
+    wq = load(p.dim, p.dim, p.n_layers)
+    wk = load(p.dim, p.dim, p.n_layers)
+    wv = load(p.dim, p.dim, p.n_layers)
+    wo = load(p.dim, p.dim, p.n_layers)
+    rms_ffn_weight = load(p.dim, p.n_layers)
+    w1 = load(p.dim, p.hidden_dim, p.n_layers)
+    w2 = load(p.hidden_dim, p.dim, p.n_layers)
+    w3 = load(p.dim, p.hidden_dim, p.n_layers)
+    rms_final_weight = load(p.dim)
+    freq_cis_real = load((p.dim ÷ p.n_heads) ÷ 2, p.seq_len)
+    freq_cis_imag = load((p.dim ÷ p.n_heads) ÷ 2, p.seq_len)
+
+    if p.shared_weights
+        wcls = token_embedding_table
+    else
+        wcls = load(p.dim, p.vocab_size)
+    end
+
+    weights = TransformerWeights(; config=p, token_embedding_table, rms_att_weight, rms_ffn_weight, wq, wk, wv,
+                                wo, w1, w2, w3, rms_final_weight, freq_cis_real, freq_cis_imag, wcls)
+    return p, weights
 end
 
 @kwdef struct RunState{T} # current wave of activations

@@ -14,11 +14,16 @@ using Pkg.Artifacts
     Suddenly, a kind man came by and saw Lily. He asked her what was wrong. Lily told him about the ball. The man smiled and said, "I have a useful idea!" He took out a long stick and used it to knock the ball down. Lily was so happy! She thanked the man and they played together in the sunshine."""
 
     LanguageModels.main(temperature = 0.0f0, steps = 256, prompt = "Once upon a time, there was a dog", io=buf)
-    @test String(take!(buf)) == """Once upon a time, there was a dog named Max. Max was a very happy dog and he loved to play. One day, Max was playing in the park when he saw a big, scary cat. Max was so scared that he started to run away.
+    output = """Once upon a time, there was a dog named Max. Max was a very happy dog and he loved to play. One day, Max was playing in the park when he saw a big, scary cat. Max was so scared that he started to run away.
     Max ran and ran until he was very tired. He stopped to take a rest and then he saw a big, scary cat. Max was so scared that he started to cry.
     The cat said, "Don't be scared, little dog. I won't hurt you. I just want to be your friend."
     Max was still scared, but he was also very brave. He said, "Okay, I'm sorry. I won't be scared anymore."
     The cat smiled and said, "That's okay. I'm not scary. I just want to be friends."
     Max was so happy that he had made a new friend. He and the cat played together all day and had lots of fun."""
+    @test String(take!(buf)) == output
+
+    # Try with mmapping
+    LanguageModels.main(temperature = 0.0f0, steps = 256, prompt = "Once upon a time, there was a dog", io=buf; mmap=true)
+    @test String(take!(buf)) == output
 
 end

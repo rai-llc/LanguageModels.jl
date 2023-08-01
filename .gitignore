@@ -1,1 +1,4 @@
 /Manifest.toml
+sentencepiece_model.proto
+sentencepiece/sentencepiece_model_pb.jl
+sentencepiece/sentencepiece.jl

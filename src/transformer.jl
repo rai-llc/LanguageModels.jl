@@ -107,13 +107,12 @@ end
 
 
 
-stories15M_path = artifact"stories15M"
+default_model = artifact"stories15M_model"
 
 """
     main(;
         checkpoint_filename,
         tokenizer_filename,
-        tokenizer_loader = load_tokenizer,
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
@@ -131,9 +130,8 @@ The defaults for checkpoint_filename and tokenizer_filename load the
 stories15M.bin model from Andrej Karpathy's tinyllamas project.
 """
 function main(;
-        checkpoint_filename = joinpath(stories15M_path, "stories15M.bin"),
-        tokenizer_filename = joinpath(stories15M_path, "tokenizer.bin"),
-        tokenizer_loader = load_tokenizer,
+        checkpoint_filename = joinpath(default_model, "stories15M.bin"),
+        tokenizer_filename = joinpath(default_model, "tokenizer.model"),
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
@@ -145,7 +143,7 @@ function main(;
     config, weights = load_model(checkpoint_filename)
 
     # read in the tokenizer.bin file
-    tokenizer = tokenizer_loader(tokenizer_filename, config.vocab_size)
+    tokenizer = load_sentencepiece_tokenizer(tokenizer_filename)
     vocab = tokenizer.alphabet
     state = RunState(config)
 

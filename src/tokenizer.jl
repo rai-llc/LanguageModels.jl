@@ -70,32 +70,6 @@ struct DigramEncodingTokenizer{T, S<:Real} <: AbstractString
 end
 
 """
-    load_tokenizer(filename, vocab_size) -> DigramEncodingTokenizer{String,Float32}
-
-Loads the tokenizer from the binary file format used by nanoGPT.
-"""
-function load_tokenizer(filename, vocab_size)
-    vocab = Vector{Vector{UInt8}}(undef, vocab_size)
-    vocab_scores = Vector{Float32}(undef, vocab_size)
-    file = open(filename)
-    max_token_length = read(file, Int32)
-    for i in 1:vocab_size
-        vocab_scores[i] = read(file, Float32)
-        len = read(file, Int32)
-        if len > max_token_length
-            @error "Encountered token with id $i of length $len exceeding maximum of $max_token_length"
-        end
-        vocab[i] = read(file, len)
-    end
-    if !eof(file)
-        @warn "Stopped before end of file was reached: $filename"
-    end
-    close(file)
-    
-    DigramEncodingTokenizer([String(copy(s)) for s in vocab], vocab_scores)
-end
-
-"""
     _infer_int_type(n) -> T <: Integer
 
 Finds the smallest (unsigned) integer type that can represent the positive number `n`.

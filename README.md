@@ -59,7 +59,7 @@ Supported keyword arguments:
 
 ## Models
 
-This implementation by default uses the `stories15M` model from Andrej Karpathy's tinyllamas project on HuggingFace, and its corresponding `tokenizer.bin` from the `llama2.c` repo.
+This implementation by default uses the `stories15M` model from Andrej Karpathy's tinyllamas project on HuggingFace, and its corresponding `tokenizer.model` from the `llama2.c` repo.
 This model is automatically downloaded when the package is built.
 
 ### llama-2
@@ -70,7 +70,7 @@ The `tokenizer.model` can be read as is. (The code here automatically generates 
 
 
 ```jl
-julia> LanguageModels.main(checkpoint_filename="/Users/jiahao/models/llama/llama-2-7b.bin", tokenizer_filename="/Users/jiahao/models/llama/tokenizer.model", tokenizer_loader=LanguageModels.load_sentencepiece_model, prompt="Once upon a time, there was a llama called",)
+julia> LanguageModels.main(checkpoint_filename="/Users/jiahao/models/llama/llama-2-7b.bin", tokenizer_filename="/Users/jiahao/models/llama/tokenizer.model", prompt="Once upon a time, there was a llama called",)
 Once upon a time, there was a llama called Pinky and a sheep called Blue.
 Pinky was a llama who ate vermicelli. He was very fussy about how it was cooked. He wanted it long, and hot and slightly damp. It was the only way he would eat it.
 He lived with two humans, Flora and Henry. They didn’t like him very much. They found him funny-looking and they thought he was smelly.

@@ -1,3 +1,11 @@
-[stories15M]
-git-tree-sha1 = "5cc370742f4ebe8460961700125f53ba82794ea7"
+[stories110M_model]
+git-tree-sha1 = "8bbe8fdb49ab4668821c1e29506bce9929db6e67"
+lazy = true
+
+[stories15M_model]
+git-tree-sha1 = "07c074c6190df78e2c79ed6079134d9fc22d900f"
+lazy = true
+
+[stories42M_model]
+git-tree-sha1 = "8fb6bbcab99a8f791ad86f0344eee468ee299fc5"
 lazy = true

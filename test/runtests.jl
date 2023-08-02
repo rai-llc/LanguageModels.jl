@@ -1,11 +1,10 @@
-using Downloads
 using LanguageModels
 using Test
-using Pkg.Artifacts
+
+include("../src/artifacts.jl")
+buf = IOBuffer()
 
 @testset "LanguageModels.jl" begin
-    include("../src/artifacts.jl")
-    buf = IOBuffer()
 
     LanguageModels.main(temperature = 0.0f0, steps = 256, prompt = "", io=buf)
     @test String(take!(buf)) == """Once upon a time, there was a little girl named Lily. She loved to play outside in the sunshine. One day, she saw a big, red ball in the sky. It was the sun! She thought it was so pretty.

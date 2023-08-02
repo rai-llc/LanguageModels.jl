@@ -14,7 +14,7 @@ end
 # Load interface
 include("sentencepiece/sentencepiece_model_pb.jl")
 
-function load_sentencepiece_model(filename, vocab_size)
+function load_sentencepiece_tokenizer(filename)
     tokenizer_model = open(filename) do f
         d = ProtoDecoder(f)
         decode(d, ModelProto)
@@ -22,11 +22,10 @@ function load_sentencepiece_model(filename, vocab_size)
     pieces = [p.piece for p in tokenizer_model.pieces]
     scores = [p.score for p in tokenizer_model.pieces]
 
-    if !(vocab_size == length(pieces) == length(scores))
-        @warn "Expected $vocab_size tokens, but found $(length(pieces)) tokens in $filename"
-    end
-
-    # Cosmetric rewriting of pieces
+    # Cosmetic rewriting of pieces
+    pieces[1] = "�" #  Unknown token -> Unknown character character
+    pieces[2] = string(Char(0x98)) # Beginning of sentence -> Start of string character
+    pieces[3] = string(Char(0x9c)) # End of sentence -> String terminator character
     for i in 0x00:0xff
         pieces[i+4] = string(Char(i))
     end

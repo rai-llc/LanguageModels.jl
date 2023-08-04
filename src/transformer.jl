@@ -1,12 +1,3 @@
-function load_model(checkpoint_filename)
-    open(checkpoint_filename) do file
-        config = read(file, Config)
-        weights = TransformerWeights(config)
-        read!(file, weights)
-        return config, weights
-    end
-end
-
 @views function transformer!(token::Int, pos::Int, p::Config, s::RunState, w::TransformerWeights)
     # a few convenience variables
     x = s.x
@@ -66,7 +57,7 @@ end
             k = s.key_cache[this_head, 1:pos, l]
             # calculate the attention score as the dot product of q and k
             mul!(s.att[1:pos], k', q)
-            s.att[1:pos] /= √(head_size)            
+            s.att[1:pos] /= √(head_size)
             # softmax the scores to get attention weights
             softmax!(s.att[1:pos])
 
@@ -90,7 +81,7 @@ end
 
         # F.silu silu(x)=x*σ(x), where σ(x) is the logistic sigmoid
         @. s.hb *= s.hb2*logistic(s.hb)
-        
+
         # final matmul to get the output of the ffn
         mul!(s.xb, w.w2[:, :, l]', s.hb)
 
@@ -117,7 +108,8 @@ default_model = artifact"stories15M_model"
         steps = 256,
         prompt = "",
         stop_on_special_tokens = true,
-        io = stdout)
+        io = stdout,
+        mmap = false)
 
 This implementation has been tested on the stories15M nano GPT model
 and mostly reproduces the output of llama2.c at zero temperature with no prompt.
@@ -128,6 +120,10 @@ stop_on_special_tokens = false.
 
 The defaults for checkpoint_filename and tokenizer_filename load the
 stories15M.bin model from Andrej Karpathy's tinyllamas project.
+
+If `mmap=true`, the weights will be loaded using memory mapping
+using the Mmap stdlib (<https://docs.julialang.org/en/v1/stdlib/Mmap/>).
+This can allow loading larger models into memory.
 """
 function main(;
         checkpoint_filename = joinpath(default_model, "stories15M.bin"),
@@ -136,11 +132,12 @@ function main(;
         steps = 256,
         prompt = "",
         stop_on_special_tokens = true,
-        io = stdout
+        io = stdout,
+        mmap = false
     )
 
     # read in the model.bin file
-    config, weights = load_model(checkpoint_filename)
+    config, weights = load_model(checkpoint_filename; materialize= mmap ? identity : copy)
 
     # read in the tokenizer.bin file
     tokenizer = load_sentencepiece_tokenizer(tokenizer_filename)
@@ -156,15 +153,15 @@ function main(;
     start_time = nothing# used to time our code, only initialized after first iteration
     token = 2   # init with BOS token, as done in Llama-2 sentencepiece tokenizer
     pos = 1     # position in the sequence
-    while (pos <= steps) 
+    while (pos <= steps)
         # forward the transformer to get logits for the next token
         transformer!(token, pos, config, state, weights)
 
-        if pos <= num_prompt_tokens 
+        if pos <= num_prompt_tokens
             # if we are still processing the input prompt, force the next prompt token
             next = prompt_tokens[pos]
         elseif (temperature == 0.0f0) # sample the next token
-        
+
                 # greedy argmax sampling: take the token with the highest probability
                 next = argmax(state.logits)
         else # sample the next token at finite temperature

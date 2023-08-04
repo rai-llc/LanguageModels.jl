@@ -52,9 +52,13 @@ Joe nodded and said, "I will remember, Mommy. I will be more careful next time."
 
 Supported keyword arguments:
 - `checkpoint_filename`: defaults to stories15M artifact which is downloaded when package is built
-- `tokenizer_filename`: ditto
+- `tokenizer_filename`: ditto.
+   The `tokenizer.model` file should be in the `sentencepiece`
+  [`ModelProto` Protocol Buffers format](https://github.com/google/sentencepiece/blob/master/src/sentencepiece_model.proto).
 - `temperature::Float32`: how much randomness to use in sampling. Default: `0.9f0`
 - `steps`: How many tokens to generate. Default: 256. Must not exceed `seq_len` in the model definition.
+- `mmap`: Whether to use [memory mapped I/O](https://docs.julialang.org/en/v1/stdlib/Mmap/#Mmap.mmap)
+   to load models that are too large to fit in memory. Default: `false`
 - `stop_on_special_tokens`. Stop sampling tokens once the special tokens such as UNK (unknown), BOS (beginning-of-sentence) or EOS (end of sentence) are encountered. Default: `true`. For behavior similar to `llama2.c`, set to `false`.
 
 ## Models

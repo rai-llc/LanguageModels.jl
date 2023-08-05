@@ -1,5 +1,7 @@
 module LanguageModels
 using Downloads # Todo: package as Artifact
+using JSON
+using Pickle
 using LinearAlgebra
 using LogExpFunctions
 using StatsBase

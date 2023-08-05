@@ -104,6 +104,8 @@ default_model = artifact"stories15M_model"
     main(;
         checkpoint_filename,
         tokenizer_filename,
+        parameter_filename,
+        format = "tinyllamas",
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
@@ -118,9 +120,24 @@ and terminates the text generation early if a BOS token is encountered
 later. To reproduce the exact output of llama2.c, specify the kwarg
 stop_on_special_tokens = false.
 
+The `format` keyword can be either "tinyllamas" or "pytorch".
+The "tinyllamas" format is the default and is the format used by
+Andrej Karpathy's tinyllamas project.
+`checkpoint_filename` (e.g. "stories15M.bin") and
+`tokenizer_filename` (e.g. "tokenizer.model") must be specified.
+The tokenizer must be in the sentencepiece ProtoModel model specification.
+The "pytorch" format is the format used by PyTorch.
+`checkpoint_filename` (e.g. "consolidated.00.pth"),
+`tokenizer_filename` (e.g. "tokenizer.model"), and
+`parameters_filename` (e.g. "params.json") and must be specified.
+The pytorch model file may be split over multiple files, e.g. "consolidated.00.pth", "consolidated.01.pth", etc.; only the first file needs to be specified.
+If `checkpoint_filename` is specified as a directory, it is assumed that the
+checkpoint filename is "consolidated.00.pth" in that directory.
+If `parameters_filename` is not specified, it is assumed to be `"params.json"` in the same directory as `checkpoint_filename`.
 The defaults for checkpoint_filename and tokenizer_filename load the
 stories15M.bin model from Andrej Karpathy's tinyllamas project.
 
+The "tinyllamas" format supports memory mapping.
 If `mmap=true`, the weights will be loaded using memory mapping
 using the Mmap stdlib (<https://docs.julialang.org/en/v1/stdlib/Mmap/>).
 This can allow loading larger models into memory.
@@ -128,6 +145,8 @@ This can allow loading larger models into memory.
 function main(;
         checkpoint_filename = joinpath(default_model, "stories15M.bin"),
         tokenizer_filename = joinpath(default_model, "tokenizer.model"),
+        parameters_filename = nothing,
+        format = "tinyllamas",
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
@@ -137,7 +156,19 @@ function main(;
     )
 
     # read in the model.bin file
-    config, weights = load_model(checkpoint_filename; materialize= mmap ? identity : copy)
+    if format == "tinyllamas"
+        config, weights = load_model(checkpoint_filename; materialize= mmap ? identity : copy)
+    elseif format == "pytorch"
+        if isdir(checkpoint_filename) # Substitute a default
+            checkpoint_filename = joinpath(checkpoint_filename, "consolidated.00.pth")  
+        end
+        if isnothing(parameters_filename) # Substitute a default
+            parameters_filename = joinpath(dirname(checkpoint_filename), "params.json")  
+        end
+        config, weights = load_torch_model(checkpoint_filename, parameters_filename)
+    else
+        error("unknown format $format")
+    end
 
     # read in the tokenizer.bin file
     tokenizer = load_sentencepiece_tokenizer(tokenizer_filename)

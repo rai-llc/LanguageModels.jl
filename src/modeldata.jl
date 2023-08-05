@@ -60,6 +60,30 @@ end
     wcls::Mat # (dim, vocab_size)
 end
 
+function checksizes(w::TransformerWeights)
+    dim = w.config.dim
+    hidden_dim = w.config.hidden_dim
+    vocab_size = w.config.vocab_size
+    layer = w.config.n_layers
+    n_heads = w.config.n_heads
+    seq_len = w.config.seq_len
+
+    @assert size(w.token_embedding_table) == (dim, vocab_size)
+    @assert size(w.rms_att_weight) == (dim, layer)
+    @assert size(w.rms_ffn_weight) == (dim, layer)
+    @assert size(w.wq) == (dim, dim, layer)
+    @assert size(w.wk) == (dim, dim, layer)
+    @assert size(w.wv) == (dim, dim, layer)
+    @assert size(w.wo) == (dim, dim, layer)
+    @assert size(w.w1) == (dim, hidden_dim, layer)
+    @assert size(w.w2) == (hidden_dim, dim, layer)
+    @assert size(w.w3) == (dim, hidden_dim, layer)
+    @assert size(w.rms_final_weight) == (dim,)
+    @assert size(w.freq_cis_real) == ((dim ÷ n_heads) ÷ 2, seq_len)
+    @assert size(w.freq_cis_imag) == ((dim ÷ n_heads) ÷ 2, seq_len)
+    @assert size(w.wcls) == (dim, vocab_size)    
+end
+
 @views function load_model(checkpoint_filename; materialize=copy)
     v = Mmap.mmap(checkpoint_filename, Vector{Float32})
 
@@ -101,6 +125,110 @@ end
                                 wo, w1, w2, w3, rms_final_weight, freq_cis_real, freq_cis_imag, wcls)
     return p, weights
 end
+
+
+"""
+Compute frequencies for rotary positional encoding (RoPE)
+"""
+function RoPE(dim::Int, last::Int, θ::Real = 10000)
+    freqs = (θ .^ -(0.0f0:2.0f0/dim:1.0f0)[1:((dim÷2))])
+    t = 0:(last-1)
+    freqs_mat = freqs*t'
+    freqs_cos = cos.(freqs_mat)  # real part
+    freqs_sin = sin.(freqs_mat)  # imaginary part
+    return freqs_cos, freqs_sin
+end
+
+@views function load_torch_model(
+	checkpoint_filename,
+	parameters_filename,
+    )
+
+    params_dict = open(parameters_filename) do f
+        JSON.parse(read(f, String))
+    end
+
+    dim = params_dict["dim"]
+    n_heads = params_dict["n_heads"]
+    n_kv_heads = get(params_dict, "n_kv_heads", n_heads)
+    n_layers = params_dict["n_layers"] 
+
+    vars = Pickle.Torch.THload(checkpoint_filename)
+
+    vocab_size = size(vars["tok_embeddings.weight"], 1)
+    hidden_dim = size(vars["layers.1.feed_forward.w1.weight"], 1)
+
+    shared_weights = !("output.weight" in keys(vars))
+    seq_len = get(params_dict, "seq_len", 2048)
+
+    # Construct config header
+    p = Config(
+    dim,        # transformer dimension
+    hidden_dim, # for ffn layers
+    n_layers,   # number of layers
+    n_heads,    # number of query heads
+    n_kv_heads, # number of key/value heads (can be < query heads because of multiquery)
+    vocab_size, # vocabulary size, usually 256 (byte-level)
+    seq_len,    # max sequence length
+    shared_weights
+    )
+
+    # Clump tensors together
+    wq = Array{Float32}(undef, (dim, dim, n_layers))
+    for l in 0:n_layers-1
+        wq[:,:,l+1] = vars["layers.$l.attention.wq.weight"]'
+    end
+    wk = Array{Float32}(undef, (dim, dim, n_layers))
+    for l in 0:n_layers-1
+        wk[:,:,l+1] = vars["layers.$l.attention.wk.weight"]'
+    end
+    wv = Array{Float32}(undef, (dim, dim, n_layers))
+    for l in 0:n_layers-1
+        wv[:,:,l+1] = vars["layers.$l.attention.wv.weight"]'
+    end
+    wo = Array{Float32}(undef, (dim, dim, n_layers))
+    for l in 0:n_layers-1
+        wo[:,:,l+1] = vars["layers.$l.attention.wo.weight"]'
+    end
+    
+    w1 = Array{Float32}(undef, (dim, hidden_dim, n_layers))
+    for l in 0:n_layers-1
+        w1[:,:,l+1] = vars["layers.$l.feed_forward.w1.weight"]'
+    end
+    w2 = Array{Float32}(undef, (hidden_dim, dim, n_layers))
+    for l in 0:n_layers-1
+        w2[:,:,l+1] = vars["layers.$l.feed_forward.w2.weight"]'
+    end
+    w3 = Array{Float32}(undef, (dim, hidden_dim, n_layers))
+    for l in 0:n_layers-1
+        w3[:,:,l+1] = vars["layers.$l.feed_forward.w3.weight"]'
+    end
+
+    rms_att_weight = Array{Float32}(undef, (dim, n_layers))
+    for l in 0:n_layers-1
+        rms_att_weight[:,l+1] = vars["layers.$l.attention_norm.weight"]
+    end
+    rms_ffn_weight = Array{Float32}(undef, (dim, n_layers))
+    for l in 0:n_layers-1
+        rms_ffn_weight[:,l+1] = vars["layers.$l.ffn_norm.weight"]
+    end
+
+    f_cos, f_sin = RoPE(dim÷n_heads, seq_len)
+
+    w = TransformerWeights(config=p,
+        token_embedding_table = Matrix{Float32}(vars["tok_embeddings.weight"]'),
+        rms_att_weight=rms_att_weight,
+        rms_ffn_weight=rms_ffn_weight,
+        wq=wq, wk=wk, wv=wv, wo=wo,
+        w1=w1, w2=w2, w3=w3,
+        # final rmsnorm
+        rms_final_weight = Float32.(vars["norm.weight"]),
+        freq_cis_real = f_cos, freq_cis_imag = f_sin,
+        wcls =Matrix{Float32}(vars[shared_weights ? "tok_embeddings.weight" : "output.weight"]')
+    )
+    return p, w
+end
+
 
 @kwdef struct RunState{T} # current wave of activations
     x::Vector{T}      # activation at current time stamp (dim,)

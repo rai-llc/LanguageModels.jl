@@ -110,9 +110,10 @@ default_model = artifact"stories15M_model"
         stop_on_special_tokens = true,
         io = stdout,
         mmap = false,
+        token = 2,
         state = nothing,
         tokenizer = nothing,
-        weights = nothing) -> (pos, state, tokenizer, weights)
+        weights = nothing) -> (pos, token, state, tokenizer, weights)
 
 This implementation has been tested on the stories15M nano GPT model
 and mostly reproduces the output of llama2.c at zero temperature with no prompt.
@@ -145,6 +146,7 @@ This can allow loading larger models into memory.
 
 Returns:
 - pos: position in the sequence
+- token: current token (default: 2 (beginning of sentence, BOS))
 - state::RunState: iteration state
 - tokenizer: Tokenizer,
 - weights: weights of model
@@ -164,6 +166,7 @@ function main(;
         io = stdout,
         mmap = false,
         pos = 1,
+        token = 2,
         tokenizer = nothing,
         state = nothing,
         weights = nothing
@@ -205,7 +208,6 @@ function main(;
 
     # start the main loop
     start_time = nothing# used to time our code, only initialized after first iteration
-    token = 2   # init with BOS token, as done in Llama-2 sentencepiece tokenizer
     while (pos ≤ steps)
         try
             # forward the transformer to get logits for the next token
@@ -259,11 +261,11 @@ function main(;
         end
     end
     @label final
-    println(io)
+    io==stdout && println()
 
     # report our achieved tok/s
     speed = config.seq_len / (time_ns() - start_time)*1e9
     @info "achieved tok/s: $speed"
 
-    return pos, state, tokenizer, weights
+    return pos, token, state, tokenizer, weights
 end

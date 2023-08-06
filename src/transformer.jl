@@ -1,9 +1,7 @@
 @views function transformer!(token::Int, pos::Int, p::Config, s::RunState, w::TransformerWeights)
     # a few convenience variables
     x = s.x
-    dim = p.dim
-    hidden_dim = p.hidden_dim
-    head_size = dim ÷ p.n_heads
+    head_size = p.dim ÷ p.n_heads
 
     # copy the token embedding into x
     x[:] = w.token_embedding_table[:, token]
@@ -111,7 +109,10 @@ default_model = artifact"stories15M_model"
         prompt = "",
         stop_on_special_tokens = true,
         io = stdout,
-        mmap = false)
+        mmap = false,
+        state = nothing,
+        tokenizer = nothing,
+        weights = nothing) -> (pos, state, tokenizer, weights)
 
 This implementation has been tested on the stories15M nano GPT model
 and mostly reproduces the output of llama2.c at zero temperature with no prompt.
@@ -141,6 +142,15 @@ The "tinyllamas" format supports memory mapping.
 If `mmap=true`, the weights will be loaded using memory mapping
 using the Mmap stdlib (<https://docs.julialang.org/en/v1/stdlib/Mmap/>).
 This can allow loading larger models into memory.
+
+Returns:
+- pos: position in the sequence
+- state::RunState: iteration state
+- tokenizer: Tokenizer,
+- weights: weights of model
+
+The returned data allows you to resume the generation process with a new prompt, e.g. with
+main(state=state, vocab=vocab, weights=weights, prompt="Here is my new prompt")
 """
 function main(;
         checkpoint_filename = joinpath(default_model, "stories15M.bin"),
@@ -152,28 +162,41 @@ function main(;
         prompt = "",
         stop_on_special_tokens = true,
         io = stdout,
-        mmap = false
+        mmap = false,
+        pos = 1,
+        tokenizer = nothing,
+        state = nothing,
+        weights = nothing
     )
 
-    # read in the model.bin file
-    if format == "tinyllamas"
-        config, weights = load_model(checkpoint_filename; materialize= mmap ? identity : copy)
-    elseif format == "pytorch"
-        if isdir(checkpoint_filename) # Substitute a default
-            checkpoint_filename = joinpath(checkpoint_filename, "consolidated.00.pth")  
+    # read in the model.bin file if weights is not specified
+    if isnothing(weights)
+        if format == "tinyllamas"
+            config, weights = load_model(checkpoint_filename; materialize= mmap ? identity : copy)
+        elseif format == "pytorch"
+            if isdir(checkpoint_filename) # Substitute a default
+                checkpoint_filename = joinpath(checkpoint_filename, "consolidated.00.pth")  
+            end
+            if isnothing(parameters_filename) # Substitute a default
+                parameters_filename = joinpath(dirname(checkpoint_filename), "params.json")  
+            end
+            config, weights = load_torch_model(checkpoint_filename, parameters_filename)
+        else
+            error("unknown format $format")
         end
-        if isnothing(parameters_filename) # Substitute a default
-            parameters_filename = joinpath(dirname(checkpoint_filename), "params.json")  
-        end
-        config, weights = load_torch_model(checkpoint_filename, parameters_filename)
     else
-        error("unknown format $format")
+        config = weights.config
     end
 
-    # read in the tokenizer.bin file
-    tokenizer = load_sentencepiece_tokenizer(tokenizer_filename)
+    # read in the tokenizer.bin file if vocab is not specified
+    if isnothing(tokenizer)
+        tokenizer = load_sentencepiece_tokenizer(tokenizer_filename)
+    end
     vocab = tokenizer.alphabet
-    state = RunState(config)
+
+    if isnothing(state) #initialize
+       state = RunState(config)
+    end
 
     # process the prompt, if any
     s = tokenizer(prompt)
@@ -183,55 +206,64 @@ function main(;
     # start the main loop
     start_time = nothing# used to time our code, only initialized after first iteration
     token = 2   # init with BOS token, as done in Llama-2 sentencepiece tokenizer
-    pos = 1     # position in the sequence
-    while (pos <= steps)
-        # forward the transformer to get logits for the next token
-        transformer!(token, pos, config, state, weights)
+    while (pos ≤ steps)
+        try
+            # forward the transformer to get logits for the next token
+            transformer!(token, pos, config, state, weights)
 
-        if pos <= num_prompt_tokens
-            # if we are still processing the input prompt, force the next prompt token
-            next = prompt_tokens[pos]
-        elseif (temperature == 0.0f0) # sample the next token
+            if pos ≤ num_prompt_tokens
+                # if we are still processing the input prompt, force the next prompt token
+                next = prompt_tokens[pos]
+            elseif (temperature == 0.0f0) # sample the next token
 
-                # greedy argmax sampling: take the token with the highest probability
-                next = argmax(state.logits)
-        else # sample the next token at finite temperature
-            # apply the temperature to the logits
-            state.logits ./= temperature
-            # apply softmax to the logits to get the probabilities for next token
-            softmax!(state.logits)
-            # we sample from this distribution to get the next token
-            # p, i = findmax(state.logits)
-            next::Int = sample(ProbabilityWeights(state.logits, 1.0f0))
-            # error( p, " - ", i, " - ", vocab[i])
-        end
+                    # greedy argmax sampling: take the token with the highest probability
+                    next = argmax(state.logits)
+            else # sample the next token at finite temperature
+                # apply the temperature to the logits
+                state.logits ./= temperature
+                # apply softmax to the logits to get the probabilities for next token
+                softmax!(state.logits)
+                # we sample from this distribution to get the next token
+                # p, i = findmax(state.logits)
+                next::Int = sample(ProbabilityWeights(state.logits, 1.0f0))
+                # error( p, " - ", i, " - ", vocab[i])
+            end
 
-        # following BOS token (2), sentencepiece decoder strips any leading whitespace (see PR #89)
-        token_str = vocab[next]
-        if token == 2
-            token_str = lstrip(token_str)
-        end
+            # following BOS token (2), sentencepiece decoder strips any leading whitespace (see PR #89)
+            token_str = vocab[next]
+            if token == 2
+                token_str = lstrip(token_str)
+            end
 
-        # cjh: This behavior deviates from llama2.c if stop_on_special_tokens == true
-        if stop_on_special_tokens && (1 ≤ next ≤ 3)
-            break
-        end
+            # cjh: This behavior deviates from llama2.c if stop_on_special_tokens == true
+            if stop_on_special_tokens && (1 ≤ next ≤ 3)
+                break
+            end
 
-        print(io, token_str)
+            print(io, token_str)
 
-        # advance forward
-        token = next
-        pos += 1
-        # init our timer here because the first iteration is slow
-        if isnothing(start_time)
-            start_time = time_ns()
+            # advance forward
+            token = next
+            pos += 1
+            # init our timer here because the first iteration is slow
+            if isnothing(start_time)
+                start_time = time_ns()
+            end
+        catch e
+            # If user tried to interrupt process, stop running the main loop
+            if e isa InterruptException
+                @info "User interrupted generation after $pos tokens"
+                @goto final
+            end 
+            rethrow(e)
         end
     end
-    println()
+    @label final
+    println(io)
 
     # report our achieved tok/s
     speed = config.seq_len / (time_ns() - start_time)*1e9
     @info "achieved tok/s: $speed"
 
-    return nothing
+    return pos, state, tokenizer, weights
 end

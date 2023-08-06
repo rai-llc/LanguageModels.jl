@@ -173,6 +173,15 @@ end
     shared_weights
     )
 
+    @info "dim = $dim"
+    @info "hidden_dim = $hidden_dim"
+    @info "n_layers = $n_layers"
+    @info "n_heads = $n_heads"
+    @info "n_kv_heads = $n_kv_heads"
+    @info "seq_len = $seq_len"
+    @info "shared_weights = $shared_weights"
+    @info "vocab_size = $vocab_size"
+
     # Clump tensors together
     wq = Array{Float32}(undef, (dim, dim, n_layers))
     for l in 0:n_layers-1

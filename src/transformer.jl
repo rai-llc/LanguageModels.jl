@@ -1,3 +1,5 @@
+using UnicodePlots
+
 @views function transformer!(token::Int, pos::Int, p::Config, s::RunState, w::TransformerWeights)
     # a few convenience variables
     x = s.x
@@ -115,6 +117,7 @@ default_model = artifact"stories15M_model"
         token = 2,
         state = nothing,
         tokenizer = nothing,
+        plot_probabilities = false,
         weights = nothing) -> (pos, token, state, tokenizer, weights)
 
 This implementation has been tested on the stories15M nano GPT model
@@ -178,7 +181,8 @@ function main(;
         token = 2,
         tokenizer = nothing,
         state = nothing,
-        weights = nothing
+        weights = nothing,
+        plot_probabilities = false
     )
 
     @info "Temperature: $temperature"
@@ -280,12 +284,29 @@ $prompt [/INST]\n
                 print_token_ids && print_subscripted(io, "($next)")
             end
 
+            if plot_probabilities
+                d = softmax(state.logits)
+                idxs = findall(d .> 0.01)
+                if length(idxs) > 0
+                    println(io)
+                    print(io, barplot(
+                        String[tokenizer.alphabet[i] for i in idxs],
+                        d[idxs]
+                    ))
+                end
+            end
+
+
             # cjh: This behavior deviates from llama2.c if stop_on_eos == true
             # The last condition stops only if </s> is not part of the prompt
             if stop_on_eos && next==3 && pos>num_prompt_tokens
                 break
             end
-            
+
+            if pos == num_prompt_tokens
+                @goto final
+            end
+
             # advance forward
             token = next
             pos += 1

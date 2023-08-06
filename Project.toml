@@ -15,6 +15,7 @@ ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 ProtoBuf = "3349acd9-ac6a-5e09-bcdb-63829b23a429"
 ReplMaker = "b873ce64-0db9-51f5-a568-4457d8e49576"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
 julia = "1.5"

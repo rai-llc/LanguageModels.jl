@@ -100,15 +100,35 @@ function (enc::DigramEncodingTokenizer)(text::String)
     T = eltype(scores)
 
     tokens = R[]
+
     # First encode every character
-    for ch in text
-        char = string(ch)
-        id = findfirst(isequal(char), alphabet)
-        if isnothing(id)
-            @warn "\"$char\" ($(collect(char))) not in alphabet; skipping"
-        else
-            push!(tokens, id)
+    len = length(text)
+    skip = 0
+    for (idx, char) in enumerate(text)
+        if skip > 0
+            skip -= 1
+            continue
         end
+        # First look for special tokens
+        for tok_id in 1:3
+            tok = alphabet[tok_id]
+            if idx + length(tok) < len && text[idx:idx+length(tok)-1] == tok
+                @info "Matched special token $tok"
+                push!(tokens, tok_id)
+                skip = length(tok)-1
+                @goto next_character
+            end
+        end
+        # Then look for everything else
+        id = findfirst(isequal(char), alphabet)
+        if !isnothing(id)
+            push!(tokens, id)
+        else # Fallback; manually encode each code unit
+            for cu in codeunits(string(char))
+                push!(tokens, cu+4)
+            end
+        end
+        @label next_character
     end
     
     while true # Keep merging consecutive pairs

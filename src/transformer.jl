@@ -233,6 +233,7 @@ $prompt [/INST]\n
         state = RunState(config)
     end
  
+    string_buf = IOBuffer()
     # tokenize the prompt        
     s = tokenizer(raw_prompt)
     num_prompt_tokens = length(s)
@@ -270,12 +271,18 @@ $prompt [/INST]\n
             end
 
             if print_prompt || pos > num_prompt_tokens
-                print(io, token_str)
+                if next in 132:259 # Capture raw byte tokens for Unicode string; see #6
+                    write(string_buf, UInt8(next-4)) # Actual byte value
+                else
+                    print(io, String(take!(string_buf))) # print any buffered text
+                    print(io, token_str)
+                end
                 print_token_ids && print_subscripted(io, "($next)")
             end
 
             # cjh: This behavior deviates from llama2.c if stop_on_eos == true
-            if stop_on_eos && next==3
+            # The last condition stops only if </s> is not part of the prompt
+            if stop_on_eos && next==3 && pos>num_prompt_tokens
                 break
             end
             
@@ -296,6 +303,7 @@ $prompt [/INST]\n
         end
     end
     @label final
+    print(io, String(take!(string_buf))) # print any buffered text
     io==stdout && println()
 
     # report our achieved tok/s

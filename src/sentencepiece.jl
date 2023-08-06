@@ -28,7 +28,7 @@ function load_sentencepiece_tokenizer(filename)
     for i in 0x00:0xff
         pieces[i+4] = string(Char(i))
     end
-
+    
     output = copy(pieces)
 
     # Cosmetic rewriting of pieces

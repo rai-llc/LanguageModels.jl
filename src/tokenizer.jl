@@ -64,9 +64,10 @@ julia> enc = load_tokenizer("/Users/jiahao/local/src/llama2.c/tokenizer.bin", 32
  0x0c73
 ```
 """
-struct DigramEncodingTokenizer{T, S<:Real} <: AbstractString
+struct DigramEncodingTokenizer{T, S<:Real}
     alphabet::Vector{T}
     scores::Vector{S}
+    output::Vector{T}
 end
 
 """
@@ -143,3 +144,5 @@ function (enc::DigramEncodingTokenizer)(text::String)
     TokenizedString(tokens, alphabet)
 end
 
+# getindex
+Base.getindex(t::DigramEncodingTokenizer, i::Int) = t.output[i]

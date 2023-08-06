@@ -107,7 +107,9 @@ default_model = artifact"stories15M_model"
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
-        stop_on_special_tokens = true,
+        raw_prompt = "",
+        print_token_ids = false,
+        stop_on_eos = true,
         io = stdout,
         mmap = false,
         token = 2,
@@ -120,7 +122,7 @@ and mostly reproduces the output of llama2.c at zero temperature with no prompt.
 The main difference is that it does not print the starting BOS token,
 and terminates the text generation early if a BOS token is encountered
 later. To reproduce the exact output of llama2.c, specify the kwarg
-stop_on_special_tokens = false.
+stop_on_eos = false.
 
 The `format` keyword can be either "tinyllamas" or "pytorch".
 The "tinyllamas" format is the default and is the format used by
@@ -139,6 +141,8 @@ If `parameters_filename` is not specified, it is assumed to be `"params.json"` i
 The defaults for checkpoint_filename and tokenizer_filename load the
 stories15M.bin model from Andrej Karpathy's tinyllamas project.
 
+There are two ways to specify the prompt. the `prompt` keyword is what a user would input to a chatbot, e.g. "Hello, how are you?". the `raw_prompt` keyword is the string that is actually fed into the model, e.g. "<s>[INST] Hello, how are you?[/INST] ". If `raw_prompt` is specified, the `prompt` input is ignored.
+
 The "tinyllamas" format supports memory mapping.
 If `mmap=true`, the weights will be loaded using memory mapping
 using the Mmap stdlib (<https://docs.julialang.org/en/v1/stdlib/Mmap/>).
@@ -152,7 +156,9 @@ Returns:
 - weights: weights of model
 
 The returned data allows you to resume the generation process with a new prompt, e.g. with
-main(state=state, vocab=vocab, weights=weights, prompt="Here is my new prompt")
+main(state=state, tokenizer=tokenizer, weights=weights, prompt="Here is my new prompt")
+
+You can specify `pos` but it's probably not useful to do so.
 """
 function main(;
         checkpoint_filename = joinpath(default_model, "stories15M.bin"),
@@ -162,7 +168,10 @@ function main(;
         temperature = 0.9f0,
         steps = 256,
         prompt = "",
-        stop_on_special_tokens = true,
+        raw_prompt = nothing,
+        print_prompt = true,
+        print_token_ids = false,
+        stop_on_eos = true,
         io = stdout,
         mmap = false,
         pos = 1,
@@ -171,6 +180,9 @@ function main(;
         state = nothing,
         weights = nothing
     )
+
+    @info "Temperature: $temperature"
+    @info "Steps: $steps"
 
     # read in the model.bin file if weights is not specified
     if isnothing(weights)
@@ -191,18 +203,38 @@ function main(;
         config = weights.config
     end
 
-    # read in the tokenizer.bin file if vocab is not specified
+    # read in the tokenizer.bin file if tokenizer is not specified
     if isnothing(tokenizer)
         tokenizer = load_sentencepiece_tokenizer(tokenizer_filename)
     end
-    vocab = tokenizer.alphabet
-
-    if isnothing(state) #initialize
-       state = RunState(config)
-    end
 
     # process the prompt, if any
-    s = tokenizer(prompt)
+    
+    if isnothing(raw_prompt)
+        if isnothing(state) # Here are the default system prompts from llama-2
+            # Prompts are described at:
+            #   https://huggingface.co/blog/llama2
+            # raw_prompt does not start with <s> (BOS) because transformer!()
+            # already defaults to starting with it prior to reading in the prompt. 
+            raw_prompt = """[INST] <<SYS>>
+You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
+
+If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.
+<</SYS>>
+
+$prompt [/INST]\n
+"""
+        else
+            raw_prompt = "[INST] $prompt [/INST]\n"
+        end
+    end
+
+    if isnothing(state) #initialize
+        state = RunState(config)
+    end
+ 
+    # tokenize the prompt        
+    s = tokenizer(raw_prompt)
     num_prompt_tokens = length(s)
     prompt_tokens = s.tokens
 
@@ -228,22 +260,25 @@ function main(;
                 # we sample from this distribution to get the next token
                 # p, i = findmax(state.logits)
                 next::Int = sample(ProbabilityWeights(state.logits, 1.0f0))
-                # error( p, " - ", i, " - ", vocab[i])
+                # error( p, " - ", i, " - ", tokenizer[i])
             end
 
             # following BOS token (2), sentencepiece decoder strips any leading whitespace (see PR #89)
-            token_str = vocab[next]
+            token_str = tokenizer[next]
             if token == 2
                 token_str = lstrip(token_str)
             end
 
-            # cjh: This behavior deviates from llama2.c if stop_on_special_tokens == true
-            if stop_on_special_tokens && (1 ≤ next ≤ 3)
-                break
+            if print_prompt || pos > num_prompt_tokens
+                print(io, token_str)
+                print_token_ids && print_subscripted(io, "($next)")
             end
 
-            print(io, token_str)
-
+            # cjh: This behavior deviates from llama2.c if stop_on_eos == true
+            if stop_on_eos && next==3
+                break
+            end
+            
             # advance forward
             token = next
             pos += 1
@@ -268,4 +303,32 @@ function main(;
     @info "achieved tok/s: $speed"
 
     return pos, token, state, tokenizer, weights
+end
+
+const subscript_dict = Dict(
+    '0' => '₀',
+    '1' => '₁',
+    '2' => '₂',
+    '3' => '₃',
+    '4' => '₄',
+    '5' => '₅',
+    '6' => '₆',
+    '7' => '₇',
+    '8' => '₈',
+    '9' => '₉',
+    '(' => '₍',
+    ')' => '₎',
+    '+' => '₊',
+    '-' => '₋',
+    '=' => '₌',
+)
+
+function print_subscripted(io::IO, str::AbstractString)
+    for c in str
+        if c in keys(subscript_dict)
+            print(io, subscript_dict[c])
+        else
+            print(io, c)
+        end
+    end
 end

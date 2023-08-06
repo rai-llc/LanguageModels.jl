@@ -22,16 +22,19 @@ function load_sentencepiece_tokenizer(filename)
     pieces = [p.piece for p in tokenizer_model.pieces]
     scores = [p.score for p in tokenizer_model.pieces]
 
-    # Cosmetic rewriting of pieces
-    pieces[1] = "�" #  Unknown token -> Unknown character character
-    pieces[2] = string(Char(0x98)) # Beginning of sentence -> Start of string character
-    pieces[3] = string(Char(0x9c)) # End of sentence -> String terminator character
-    for i in 0x00:0xff
-        pieces[i+4] = string(Char(i))
-    end
     for (i, p) in enumerate(pieces)
         pieces[i] = replace(p, "▁"=>" ") # Rewrite sentencepiece's ▁ to space
     end
+    for i in 0x00:0xff
+        pieces[i+4] = string(Char(i))
+    end
 
-    DigramEncodingTokenizer(pieces, scores)
+    output = copy(pieces)
+
+    # Cosmetic rewriting of pieces
+    output[1] = "�" #  Unknown token -> Unknown character character
+    output[2] = string(Char(0x98)) # Beginning of sentence -> Start of string character
+    output[3] = string(Char(0x9c)) # End of sentence -> String terminator character
+ 
+    DigramEncodingTokenizer(pieces, scores, output)
 end

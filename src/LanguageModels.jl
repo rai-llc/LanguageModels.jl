@@ -7,7 +7,6 @@ using LogExpFunctions
 using StatsBase
 using ProtoBuf
 using Mmap # stdlib to memory map weights
-
 include("artifacts.jl") # Artifacts for managing model files
 include("modeldata.jl") # nanogpt model data
 

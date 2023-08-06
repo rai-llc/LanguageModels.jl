@@ -101,7 +101,7 @@ end
 default_model = artifact"stories15M_model"
 
 """
-    main(;
+    main(T<:AbstractArray;
         checkpoint_filename,
         tokenizer_filename,
         parameter_filename,
@@ -163,7 +163,8 @@ main(state=state, tokenizer=tokenizer, weights=weights, prompt="Here is my new p
 
 You can specify `pos` but it's probably not useful to do so.
 """
-function main(;
+main(;kwargs...) = main(Array{Float32}; kwargs...)
+function main(::Type{T};
         checkpoint_filename = joinpath(default_model, "stories15M.bin"),
         tokenizer_filename = joinpath(default_model, "tokenizer.model"),
         parameters_filename = nothing,
@@ -182,8 +183,8 @@ function main(;
         tokenizer = nothing,
         state = nothing,
         weights = nothing,
-        plot_probabilities = false
-    )
+        plot_probabilities = false,
+    ) where {S, T<:AbstractArray{S}}
 
     @info "Temperature: $temperature"
     @info "Steps: $steps"
@@ -199,7 +200,7 @@ function main(;
             if isnothing(parameters_filename) # Substitute a default
                 parameters_filename = joinpath(dirname(checkpoint_filename), "params.json")  
             end
-            config, weights = load_torch_model(checkpoint_filename, parameters_filename)
+            config, weights = load_torch_model(T, checkpoint_filename, parameters_filename)
         else
             error("unknown format $format")
         end
@@ -234,7 +235,7 @@ $prompt [/INST]\n
     end
 
     if isnothing(state) #initialize
-        state = RunState(config)
+        state = RunState(T, config)
     end
  
     string_buf = IOBuffer()
@@ -268,6 +269,12 @@ $prompt [/INST]\n
                 # error( p, " - ", i, " - ", tokenizer[i])
             end
 
+            # cjh: This behavior deviates from llama2.c if stop_on_eos == true
+            # The last condition stops only if </s> is not part of the prompt
+            if stop_on_eos && 2 ≤ next ≤ 3 && pos>num_prompt_tokens
+                break
+            end
+
             # following BOS token (2), sentencepiece decoder strips any leading whitespace (see PR #89)
             token_str = tokenizer[next]
             if token == 2
@@ -296,17 +303,6 @@ $prompt [/INST]\n
                 end
             end
 
-
-            # cjh: This behavior deviates from llama2.c if stop_on_eos == true
-            # The last condition stops only if </s> is not part of the prompt
-            if stop_on_eos && next==3 && pos>num_prompt_tokens
-                break
-            end
-
-            if pos == num_prompt_tokens
-                @goto final
-            end
-
             # advance forward
             token = next
             pos += 1
@@ -328,8 +324,10 @@ $prompt [/INST]\n
     io==stdout && println()
 
     # report our achieved tok/s
-    speed = config.seq_len / (time_ns() - start_time)*1e9
-    @info "achieved tok/s: $speed"
+    if !isnothing(start_time)
+        speed = config.seq_len / (time_ns() - start_time)*1e9
+        @info "achieved tok/s: $speed"
+    end
 
     return pos, token, state, tokenizer, weights
 end

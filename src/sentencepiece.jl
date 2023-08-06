@@ -1,14 +1,14 @@
 # Read sentencepiece model
 # Download protobufs spec from sentencepiece repo
-
-if !isfile("sentencepiece_model.proto")
-    Downloads.download("https://raw.githubusercontent.com/google/sentencepiece/635fe8423a249b6e081aacd290d8aef7476c6a28/src/sentencepiece_model.proto",
-    "sentencepiece_model.proto")
-end
-
-# Generate protobuf interface 
-if !isfile("sentencepiece/sentencepiece_model_pb.jl")
-    protojl("sentencepiece_model.proto", ".", ".")
+let
+    if !isfile(joinpath(@__DIR__, "sentencepiece/sentencepiece_model_pb.jl"))
+        proto_file = joinpath(@__DIR__, "sentencepiece_model.proto")
+        if !isfile(proto_file)
+            using Downloads
+            Downloads.download("https://raw.githubusercontent.com/google/sentencepiece/635fe8423a249b6e081aacd290d8aef7476c6a28/src/sentencepiece_model.proto", proto_file)
+        end
+        protojl(proto_file, ".", ".")
+    end
 end
 
 # Load interface

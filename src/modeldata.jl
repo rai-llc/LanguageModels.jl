@@ -139,10 +139,14 @@ function RoPE(dim::Int, last::Int, θ::Real = 10000)
     return freqs_cos, freqs_sin
 end
 
-@views function load_torch_model(
+
+load_torch_model(checkpoint_filename, parameters_filename) =
+    load_torch_model(Array{Float32}, checkpoint_filename, parameters_filename)
+
+@views function load_torch_model(::Type{T},
 	checkpoint_filename,
 	parameters_filename,
-    )
+    ) where {S, T <: AbstractArray{S}}
 
     params_dict = open(parameters_filename) do f
         JSON.parse(read(f, String))
@@ -183,41 +187,52 @@ end
     @info "vocab_size = $vocab_size"
 
     # Clump tensors together
-    wq = Array{Float32}(undef, (dim, dim, n_layers))
+    wq = T(undef, (dim, dim, n_layers))
+    # Materalize transpose view with copy to CPU memory
+    wtmp = Array{S}(undef, (dim, dim))
     for l in 0:n_layers-1
-        wq[:,:,l+1] = vars["layers.$l.attention.wq.weight"]'
+        wtmp[:,:] = vars["layers.$l.attention.wq.weight"]'
+        wq[:,:,l+1] = wtmp
     end
-    wk = Array{Float32}(undef, (dim, dim, n_layers))
+    wk = T(undef, (dim, dim, n_layers))
     for l in 0:n_layers-1
-        wk[:,:,l+1] = vars["layers.$l.attention.wk.weight"]'
+        wtmp[:,:] = vars["layers.$l.attention.wk.weight"]'
+        wk[:,:,l+1] = wtmp
     end
-    wv = Array{Float32}(undef, (dim, dim, n_layers))
+    wv = T(undef, (dim, dim, n_layers))
     for l in 0:n_layers-1
-        wv[:,:,l+1] = vars["layers.$l.attention.wv.weight"]'
+        wtmp[:,:] = vars["layers.$l.attention.wv.weight"]'
+        wv[:,:,l+1] = wtmp
     end
-    wo = Array{Float32}(undef, (dim, dim, n_layers))
+    wo = T(undef, (dim, dim, n_layers))
     for l in 0:n_layers-1
-        wo[:,:,l+1] = vars["layers.$l.attention.wo.weight"]'
-    end
-    
-    w1 = Array{Float32}(undef, (dim, hidden_dim, n_layers))
-    for l in 0:n_layers-1
-        w1[:,:,l+1] = vars["layers.$l.feed_forward.w1.weight"]'
-    end
-    w2 = Array{Float32}(undef, (hidden_dim, dim, n_layers))
-    for l in 0:n_layers-1
-        w2[:,:,l+1] = vars["layers.$l.feed_forward.w2.weight"]'
-    end
-    w3 = Array{Float32}(undef, (dim, hidden_dim, n_layers))
-    for l in 0:n_layers-1
-        w3[:,:,l+1] = vars["layers.$l.feed_forward.w3.weight"]'
+        wtmp[:,:] = vars["layers.$l.attention.wo.weight"]'
+        wo[:,:,l+1] = wtmp
     end
 
-    rms_att_weight = Array{Float32}(undef, (dim, n_layers))
+    wtmp = Array{S}(undef, (dim, hidden_dim))
+    w1 = T(undef, (dim, hidden_dim, n_layers))
+    for l in 0:n_layers-1
+        wtmp[:,:] = vars["layers.$l.feed_forward.w1.weight"]'
+        w1[:,:,l+1] = wtmp
+    end
+    w3 = T(undef, (dim, hidden_dim, n_layers))
+    for l in 0:n_layers-1
+        wtmp[:,:] = vars["layers.$l.feed_forward.w3.weight"]'
+        w3[:,:,l+1] = wtmp
+    end
+    wtmp = reshape(wtmp, (hidden_dim, dim))
+    w2 = T(undef, (hidden_dim, dim, n_layers))
+    for l in 0:n_layers-1
+        wtmp[:,:] = vars["layers.$l.feed_forward.w2.weight"]'
+        w2[:,:,l+1] = wtmp
+    end
+
+    rms_att_weight = T(undef, (dim, n_layers))
     for l in 0:n_layers-1
         rms_att_weight[:,l+1] = vars["layers.$l.attention_norm.weight"]
     end
-    rms_ffn_weight = Array{Float32}(undef, (dim, n_layers))
+    rms_ffn_weight = T(undef, (dim, n_layers))
     for l in 0:n_layers-1
         rms_ffn_weight[:,l+1] = vars["layers.$l.ffn_norm.weight"]
     end
@@ -225,47 +240,49 @@ end
     f_cos, f_sin = RoPE(dim÷n_heads, seq_len)
 
     w = TransformerWeights(config=p,
-        token_embedding_table = Matrix{Float32}(vars["tok_embeddings.weight"]'),
+        token_embedding_table = T(copy(vars["tok_embeddings.weight"]')),
         rms_att_weight=rms_att_weight,
         rms_ffn_weight=rms_ffn_weight,
         wq=wq, wk=wk, wv=wv, wo=wo,
         w1=w1, w2=w2, w3=w3,
         # final rmsnorm
-        rms_final_weight = Float32.(vars["norm.weight"]),
-        freq_cis_real = f_cos, freq_cis_imag = f_sin,
-        wcls =Matrix{Float32}(vars[shared_weights ? "tok_embeddings.weight" : "output.weight"]')
+        rms_final_weight = T(copy(vars["norm.weight"])),
+        freq_cis_real = T(f_cos), freq_cis_imag = T(f_sin),
+        wcls = T(copy(vars[shared_weights ? "tok_embeddings.weight" : "output.weight"]'))
     )
     return p, w
 end
 
 
-@kwdef struct RunState{T} # current wave of activations
-    x::Vector{T}      # activation at current time stamp (dim,)
-    xb::Vector{T}     # same, but inside a residual branch (dim,)
-    xb2::Vector{T}    # an additional buffer just for convenience (dim,)
-    hb::Vector{T}     # buffer for hidden dimension in the ffn (hidden_dim,)
-    hb2::Vector{T}    # buffer for hidden dimension in the ffn (hidden_dim,)
-    q::Vector{T}      # query (dim,)
-    k::Vector{T}      # key (dim,)
-    v::Vector{T}      # value (dim,)
-    att::Vector{T}    # buffer for scores/attention values (seq_len,)
-    logits::Vector{T} # output logits
+"current wave of activations"
+@kwdef struct RunState{T, Vec<:AbstractVector{T}, Arr3<:AbstractArray{T,3}}
+    x::Vec      # activation at current time stamp (dim,)
+    xb::Vec     # same, but inside a residual branch (dim,)
+    xb2::Vec    # an additional buffer just for convenience (dim,)
+    hb::Vec     # buffer for hidden dimension in the ffn (hidden_dim,)
+    hb2::Vec    # buffer for hidden dimension in the ffn (hidden_dim,)
+    q::Vec      # query (dim,)
+    k::Vec      # key (dim,)
+    v::Vec      # value (dim,)
+    att::Vec    # buffer for scores/attention values (seq_len,)
+    logits::Vec # output logits
     # kv cache
-    key_cache::Array{T,3}   # (dim, seq_len, layer)
-    value_cache::Array{T,3} # (dim, seq_len, layer)
+    key_cache::Arr3   # (dim, seq_len, layer)
+    value_cache::Arr3 # (dim, seq_len, layer)
 end
 
-RunState(p::Config) = RunState(;
-    x = zeros(Float32, p.dim),
-    xb = zeros(Float32, p.dim),
-    xb2 = zeros(Float32, p.dim),
-    hb = zeros(Float32, p.hidden_dim),
-    hb2 = zeros(Float32, p.hidden_dim),
-    q = zeros(Float32, p.dim),
-    k = zeros(Float32, p.dim),
-    v = zeros(Float32, p.dim),
-    att = zeros(Float32, p.seq_len),
-    logits = zeros(Float32, p.vocab_size),
-    key_cache = zeros(Float32, p.dim, p.seq_len, p.n_layers),
-    value_cache = zeros(Float32, p.dim, p.seq_len, p.n_layers),
+RunState(p::Config) = RunState(Array{Float32}, p)
+RunState(::Type{T}, p::Config) where {T<:AbstractArray} = RunState(;
+    x = T(undef, (p.dim,)),
+    xb = T(undef, (p.dim,)),
+    xb2 = T(undef, (p.dim,)),
+    hb = T(undef, (p.hidden_dim,)),
+    hb2 = T(undef, (p.hidden_dim,)),
+    q = T(undef, (p.dim,)),
+    k = T(undef, (p.dim,)),
+    v = T(undef, (p.dim,)),
+    att = T(undef, (p.seq_len,)),
+    logits = T(undef, (p.vocab_size,)),
+    key_cache = T(undef, (p.dim, p.seq_len, p.n_layers)),
+    value_cache = T(undef, (p.dim, p.seq_len, p.n_layers)),
 )

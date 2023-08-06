@@ -112,7 +112,10 @@ function (enc::DigramEncodingTokenizer)(text::String)
         # First look for special tokens
         for tok_id in 1:3
             tok = alphabet[tok_id]
-            if idx + length(tok) < len && text[idx:idx+length(tok)-1] == tok
+            idx_last = idx+length(tok)-1
+            if (idx_last ≤ len
+                    && isvalid(text, idx) && isvalid(text, idx_last)
+                    && text[idx:idx_last] == tok)
                 @info "Matched special token $tok"
                 push!(tokens, tok_id)
                 skip = length(tok)-1

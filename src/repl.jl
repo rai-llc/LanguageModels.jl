@@ -15,7 +15,7 @@ function repl_driver(prompt)
 end
 
 function init_repl(;kwargs...)
-    global repl_kwargs=kwargs
+    repl_kwargs = Dict(k => v for (k, v) in kwargs)
     initrepl(repl_driver,
         prompt_text="language_model> ",
         prompt_color=:magenta,
@@ -23,8 +23,4 @@ function init_repl(;kwargs...)
         mode_name="language_model_mode"
     )
     return nothing
-end
-
-if isdefined(Base, :active_repl)
-    init_repl()
 end

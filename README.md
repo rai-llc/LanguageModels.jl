@@ -28,26 +28,26 @@ julia> using Pkg; Pkg.add(url="https://github.com/rai-llc/LanguageModels.jl")
 
 ```jl
 julia> using LanguageModels
-
-julia> LanguageModels.talkto(temperature=0.0)
 REPL mode language_model_mode initialized. Press ~ to enter and backspace to exit.
-"Prompt(\"language_model> \",...)"
 
-language_model> Once upon a time, there was a llama named
+julia> LanguageModels.repl_kwargs[:temperature] = 0.0
+0.0
+
+language_model> Once upon a time, there was a llama named Johnny
+[ Info: Temperature: 0.0
+[ Info: Steps: 256
 [ Info: dim = 288
 [ Info: hidden_dim = 768
 [ Info: n_layers = 6
 [ Info: n_heads = 6
 [ Info: n_kv_heads = 6
-[ Info: vocab_size = 32000
 [ Info: seq_len = 256
 [ Info: shared_weights = true
 [ Info: vocab_size = 32000
-Once upon a time, there was a llama named Joe. Joe was a very happy little boy who loved to play. One day, Joe was playing in the park when he saw a big, red balloon. Joe was so excited and he wanted to play with it.
-Joe ran over to the balloon and started to play with it. He was having so much fun, he didn't notice the balloon was getting bigger and bigger. Suddenly, the balloon popped and Joe was so sad.
-Joe's mom saw what happened and she said, "Joe, why did you poke the balloon? You should be more careful." Joe felt very sorry and said, "I'm sorry, Mommy. I didn't mean to poke the balloon."
-Joe's mom hugged him and said, "It's okay, Joe. We all make mistakes. But remember, it's important to be careful and think before you do something. That way, you can avoid accidents and stay safe."
-Joe nodded and said, "I will remember, Mommy. I will be more careful next time."
+One day, Johnny was playing with his friends when they all had to go to the store. Johnny was very excited to show them the way.
+When they arrived, Johnny's noticed that Johnny was carrying a lot of news. He was so happy that he started to run around the store, but he was too fast.
+Suddenly, Johnny stopped and looked around. He saw a big box with a sign on it. He knew that Johnny was going to the store, but he was too excited to
+[ Info: achieved tok/s: 550.5533719471397
 ```
 
 Supported keyword arguments:

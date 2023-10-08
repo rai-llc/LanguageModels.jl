@@ -26,4 +26,11 @@ end
 
 softmax!(x) = LogExpFunctions.softmax!(x,x)
 
+# Automatically initialize custom REPL when module is initialized
+function __init__()
+    if isdefined(Base, :active_repl)
+        init_repl()
+    end
+end
+
 end #module
